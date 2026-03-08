@@ -1,0 +1,730 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+package personalmoneywallet;
+
+import java.util.Date;
+import java.util.Scanner;
+import java.util.ArrayList;
+import java.text.SimpleDateFormat;
+import java.text.ParseException;
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.io.IOException;
+import java.io.File;
+import java.util.List;
+
+/**
+ *
+ * @author Admin
+ */
+public class WalletManagement {
+
+    private double currentMoney;
+    private int nextId = 1;
+
+    ArrayList<personalWallet> transactions = new ArrayList<>();
+    Scanner sc = new Scanner(System.in);
+
+    public void addTransaction() {
+
+        Date inputDate = null;
+        String dateStr = "";
+        String reason = "";
+        double amount = 0;
+
+        // =====INPUT DATE=====
+        while (true) {
+            try {
+                System.out.print("Enter date (YYYY-MM-dd): ");
+                dateStr = sc.nextLine().trim();
+
+                inputDate = validateDate(dateStr);
+
+                Date todayOnly = validateDate(
+                        new SimpleDateFormat("yyyy-MM-dd")
+                                .format(new Date())
+                );
+
+                if (inputDate.after(todayOnly)) {
+                    throw new WalletException("Date cannot be in the future!");
+                }
+
+                break;
+
+            } catch (WalletException e) {
+                System.out.println(e.getMessage());
+            }
+        }
+
+        // =====INPUT REASON=====
+        while (true) {
+            try {
+                System.out.print("Enter reason: ");
+                reason = sc.nextLine().trim();
+
+                if (reason.isEmpty()) {
+                    throw new WalletException("Reason cannot be empty!");
+                }
+
+                break;
+
+            } catch (WalletException e) {
+                System.out.println(e.getMessage());
+            }
+        }
+
+        // =====INPUT AMOUNT=====
+        while (true) {
+            try {
+                System.out.print("Enter amount (positive = income, negative = expense): ");
+                amount = Double.parseDouble(sc.nextLine().trim());
+                break;
+
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid amount format!");
+            }
+        }
+
+        // =====CREATE ID=====
+        int id = nextId++;
+        currentMoney += amount;
+
+        personalWallet newTransaction
+                = new personalWallet(id, inputDate, reason, amount);
+
+        transactions.add(newTransaction);
+
+        System.out.println("\n>>> Transaction created successfully!");
+        System.out.println("Transaction ID: " + id);
+
+        // =====SHOW ALL TRANSACTIONS OF THAT DATE=====
+        System.out.println("\nTransactions on " + dateStr + ":");
+
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        for (personalWallet t : transactions) {
+            if (sdf.format(t.getDate()).equals(dateStr)) {
+                System.out.println(
+                        t.getId() + " | "
+                        + sdf.format(t.getDate()) + " | "
+                        + t.getReason() + " | "
+                        + t.getAmount()
+                );
+            }
+        }
+
+        pause();
+    }
+
+    public Date validateDate(String dateStr) throws WalletException {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+            sdf.setLenient(false);
+            return sdf.parse(dateStr);
+        } catch (ParseException e) {
+            throw new WalletException("Invalid date format! Use YYYY-MM-dd.");
+        }
+    }
+
+    private void pause() {
+        System.out.println("\nPress Enter to continue...");
+        sc.nextLine();
+    }
+
+    public void loadData() {
+        try {
+
+            File file = new File("wallet.txt");
+            if (!file.exists()) {
+                return;
+            }
+
+            Scanner fileScanner = new Scanner(file);
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+            while (fileScanner.hasNextLine()) {
+
+                String line = decode(fileScanner.nextLine());
+
+                String[] parts = line.split("\\|");
+
+                int id = Integer.parseInt(parts[0]);
+                Date date = sdf.parse(parts[1]);
+                String reason = parts[2];
+                double amount = Double.parseDouble(parts[3]);
+
+                transactions.add(new personalWallet(id, date, reason, amount));
+                currentMoney += amount;
+                if (id >= nextId) {
+                    nextId = id + 1;
+                }
+            }
+
+            fileScanner.close();
+
+        } catch (Exception e) {
+            System.out.println("Error loading file!");
+        }
+    }
+
+    public void updateTransaction() {
+
+        if (transactions.isEmpty()) {
+            System.out.println("No transactions found!");
+            pause();
+            return;
+        }
+
+        String dateStr;
+        Date inputDate = null;
+
+        while (true) {
+            try {
+                System.out.print("Enter the date to update (YYYY-MM-dd): ");
+                dateStr = sc.nextLine().trim();
+                inputDate = validateDate(dateStr);
+                break;
+            } catch (WalletException e) {
+                System.out.println(e.getMessage());
+            }
+        }
+
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        ArrayList<personalWallet> listByDate = new ArrayList<>();
+
+        for (personalWallet t : transactions) {
+            if (sdf.format(t.getDate()).equals(dateStr)) {
+                listByDate.add(t);
+            }
+        }
+
+        if (listByDate.isEmpty()) {
+            System.out.println("No income or expense found on " + dateStr);
+            pause();
+            return;
+        }
+
+        System.out.println("\nTransaction list on " + dateStr);
+
+        printHeader();
+
+        for (personalWallet t : transactions) {
+            if (sdf.format(t.getDate()).equals(dateStr)) {
+                printRow(
+                        t.getId(),
+                        sdf.format(t.getDate()),
+                        t.getReason(),
+                        t.getAmount()
+                );
+            }
+        }
+        printFooter();
+
+//==== ID ====
+        int id;
+        personalWallet selected = null;
+
+        while (true) {
+
+            System.out.print("Which ID do you want to update: ");
+            String input = sc.nextLine().trim();
+
+            if (input.isEmpty()) {
+                System.out.println("Please enter an ID!");
+                continue;
+            }
+
+            if (input.length() > 10) {
+                System.out.println("ID exceeds character limit!");
+                continue;
+            }
+
+            try {
+                id = Integer.parseInt(input); // check if number
+
+                for (personalWallet t : listByDate) {
+                    if (t.getId() == id) {
+                        selected = t;
+                        break;
+                    }
+                }
+
+                if (selected == null) {
+                    System.out.println("ID does not exist!");
+                } else {
+                    break;
+                }
+
+            } catch (NumberFormatException e) {
+                System.out.println("ID must be a number!");
+            }
+        }
+
+// ===== REASON =====
+        String newReason;
+
+        while (true) {
+            System.out.print("Enter new reason: ");
+            newReason = sc.nextLine().trim();
+
+            if (newReason.isEmpty()) {
+                System.out.println("Reason cannot be empty!");
+                continue;
+            }
+            if (newReason.length() > 60) {
+                System.out.println("Reason exceeds 60 characters!");
+                continue;
+            }
+
+            break;
+        }
+
+// ===== AMOUNT =====
+        double newAmount = 0;
+        while (true) {
+            System.out.print("Enter amount: ");
+            String input = sc.nextLine().trim();
+
+            if (input.isEmpty()) {
+                System.out.println("Please enter amount!");
+                continue;
+            }
+
+            if (input.length() > 15) {
+                System.out.println("Amount exceeds character limit!");
+                continue;
+            }
+
+            try {
+                newAmount = Double.parseDouble(input);
+                break;
+            } catch (NumberFormatException e) {
+                System.out.println("Amount must be a number!");
+            }
+        }
+
+        currentMoney -= selected.getAmount(); // subtract old amount
+        selected.setReason(newReason);
+        selected.setAmount(newAmount);
+        currentMoney += newAmount; // add new amount
+
+        System.out.println("\n>>> Update successful!");
+        System.out.println("\nTransaction list after update:");
+
+        printHeader();
+
+        for (personalWallet t : transactions) {
+            if (sdf.format(t.getDate()).equals(dateStr)) {
+                printRow(
+                        t.getId(),
+                        sdf.format(t.getDate()),
+                        t.getReason(),
+                        t.getAmount()
+                );
+            }
+        }
+
+        printFooter();
+    }
+
+    
+    //--------------------------------------------------------------------------------------------------
+    
+    // ----------Tui sửa phần bảng này với mấy print tiếng việt phần updateTransaction() nha-------------
+    
+   
+    public static void printHeader() {
+        System.out.println("+-------+------------+--------------------------------+-----------------+");
+        System.out.printf("| %-5s | %-10s | %-30s | %-15s |\n",
+                "ID", "Date", "Reason", "Amount");
+        System.out.println("+-------+------------+--------------------------------+-----------------+");
+    }
+
+    public static void printFooter() {
+        System.out.println("+-------+------------+--------------------------------+-----------------+");
+    }
+
+    public static void printRow(int id, String date, String reason, double amount) {
+
+        String idStr = String.valueOf(id);
+        
+        String amountStr = String.format("%s$", 
+        (amount == (long) amount) ? 
+        String.format("%d", (long) amount) : 
+        String.format("%s", amount));
+
+        List<String> lines = splitText(reason, 30);
+
+        for (int i = 0; i < lines.size(); i++) {
+
+            if (i == 0) {
+                System.out.printf("| %5s | %-10s | %-30s | %15s |\n",
+                        idStr, date, lines.get(i), amountStr);
+            } else {
+                System.out.printf("| %5s | %-10s | %-30s | %15s |\n",
+                        "", "", lines.get(i), "");
+            }
+        }
+    }
+
+    public static List<String> splitText(String text, int size) {
+
+        List<String> list = new ArrayList<>();
+
+        for (int i = 0; i < text.length(); i += size) {
+            list.add(text.substring(i, Math.min(i + size, text.length())));
+        }
+
+        return list;
+    }
+    
+    
+    //--------------------------------------------------------------------------------------------------
+
+    
+    
+    public void menu() throws WalletException {
+        int choice;
+        Scanner cin = new Scanner(System.in);
+
+        do {
+            System.out.println("====== PERSONAL MONEY WALLET # SE2004-Group06 ======");
+            System.out.println("1. Add transaction.");
+            System.out.println("2. Update transaction.");
+            System.out.println("3. Delete transaction.");
+            System.out.println("4. Show all transaction.");
+            System.out.println("5. Save and quit.");
+
+            do {
+                System.out.print("     Enter your choice: ");
+                String input = cin.nextLine().trim();
+
+                try {
+                    choice = Integer.parseInt(input);
+
+                    if ((choice < 1) || (choice > 5)) {
+                        System.err.println("Error: Your choice must be from 1 to 5!");
+                    }
+                } catch (NumberFormatException e) {
+                    System.err.println("Error: Invalid input! Please enter a number from 1 to 5.");
+                    choice = -1;
+                }
+
+            } while ((choice < 1) || (choice > 5));
+
+            switch (choice) {
+                case 1:
+                    System.out.println("----- ADD TRANSACTION -----");
+                    addTransaction();
+                    break;
+                case 2:
+                    System.out.println("----- UPDATE TRANSACTION -----");
+                    updateTransaction();
+                    break;
+                case 3:
+                    System.out.println("----- DELETE TRANSACTION -----");
+                    deleteTransaction();
+                    break;
+                case 4:
+                    System.out.println("----- SHOW ALL TRANSACTION -----");
+                    statistics();
+                    break;
+                case 5:
+                    saveData();
+                    System.out.println("Data saved. Goodbye!");
+
+                    break;
+                default:
+                    System.err.println("Error: Your choice must be from 1 to 5!");
+            }
+        } while (choice != 5);
+
+        cin.close();
+    }
+
+    public void saveData() {
+
+        try {
+
+            PrintWriter pw = new PrintWriter(new FileWriter("wallet.txt"));
+
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+            for (personalWallet t : transactions) {
+
+                String line
+                        = t.getId() + "|"
+                        + sdf.format(t.getDate()) + "|"
+                        + t.getReason() + "|"
+                        + t.getAmount();
+
+                String encoded = encode(line);
+
+                pw.println(encoded);
+            }
+
+            pw.close();
+
+        } catch (IOException e) {
+            System.out.println("Error saving file!");
+        }
+    }
+
+    public String encode(String text) {
+
+        String alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+        String shift = "bcdefghijklmnopqrstuvwxyz0123456789a";
+
+        text = text.toLowerCase();
+
+        String result = "";
+
+        for (int i = 0; i < text.length(); i++) {
+
+            char c = text.charAt(i);
+
+            int index = alphabet.indexOf(c);
+
+            if (index != -1) {
+                result += shift.charAt(index);
+            } else {
+                result += c;
+            }
+
+        }
+
+        return result;
+    }
+
+    public String decode(String text) {
+
+        String alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+        String shift = "bcdefghijklmnopqrstuvwxyz0123456789a";
+
+        String result = "";
+
+        for (int i = 0; i < text.length(); i++) {
+
+            char c = text.charAt(i);
+
+            int index = shift.indexOf(c);
+
+            if (index != -1) {
+                result += alphabet.charAt(index);
+            } else {
+                result += c;
+            }
+        }
+
+        return result;
+    }
+
+    public void statistics() {
+
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+        sdf.setLenient(false);
+
+        Date from = null;
+        Date to = null;
+
+        try {
+
+            System.out.print("Enter FROM date (YYYY-MM-dd): ");
+            from = sdf.parse(sc.nextLine());
+
+            System.out.print("Enter TO date (YYYY-MM-dd): ");
+            to = sdf.parse(sc.nextLine());
+
+            Date today = new Date();
+
+            if (from.after(to)) {
+                throw new WalletException("FROM must be <= TO");
+            }
+
+            if (to.after(today)) {
+                throw new WalletException("TO must be <= today");
+            }
+
+        } catch (Exception e) {
+            System.out.println("Invalid date!");
+            pause();
+            return;
+        }
+
+        double totalIncome = 0;
+        double totalExpense = 0;
+
+        System.out.println("\nTransactions from "
+                + sdf.format(from) + " to " + sdf.format(to));
+
+        printHeader();
+
+        for (personalWallet w : transactions) {
+
+            Date d = w.getDate();
+
+            if (!d.before(from) && !d.after(to)) {
+
+                printRow(
+                        w.getId(),
+                        sdf.format(w.getDate()),
+                        w.getReason(),
+                        w.getAmount()
+                );
+
+                if (w.getAmount() > 0) {
+                    totalIncome += w.getAmount();
+                } else {
+                    totalExpense += w.getAmount();
+                }
+            }
+        }
+
+        printFooter();
+
+        System.out.println("\nTotal income: " + totalIncome);
+        System.out.println("Total expense: " + totalExpense);
+        System.out.println("Current money: " + currentMoney);
+
+        pause();
+    }
+
+    public void deleteTransaction() {
+        String dateStr;
+        Date inputDate = null;
+        List<personalWallet> foundList = new ArrayList<>();
+        SimpleDateFormat sdf = new SimpleDateFormat("YYYY-MM-dd");
+
+        if (transactions.isEmpty()) {
+            System.err.println("Error: Transaction list is empty!");
+            pause();
+            return;
+        }
+
+        //find transaction
+        while (true) {
+            try {
+                System.out.print("Please enter the date to delete (YYYY-MM-dd): ");
+                dateStr = sc.nextLine().trim();
+
+                if (dateStr.isEmpty()) {
+                    throw new WalletException("Input cannot be empty! Please try again.");
+                }
+                inputDate = validateDate(dateStr);
+                break;
+            } catch (WalletException e) {
+                System.err.println(e.getMessage());
+            }
+        }
+
+        for (personalWallet t : transactions) {
+            if (sdf.format(t.getDate()).equals(dateStr)) {
+                foundList.add(t);
+            }
+        }
+
+        if (foundList.isEmpty()) {
+            System.out.println("No transactions found on date " + sdf.format(inputDate));
+            pause();
+            return;
+        }
+
+        System.out.println("Transactions for the selected date:");
+        printHeader();
+        for (personalWallet t : transactions) {
+            if (sdf.format(t.getDate()).equals(dateStr)) {
+                printRow(
+                        t.getId(),
+                        sdf.format(t.getDate()),
+                        t.getReason(),
+                        t.getAmount()
+                );
+            }
+        }
+        printFooter();
+
+        //id
+        int id;
+        personalWallet target = null;
+
+        while (true) {
+            System.out.print("Select a transaction to delete by ID: ");
+            String input = sc.nextLine().trim();
+
+            if (input.isEmpty()) {
+                System.err.println("Error: ID cannot be empty!");
+                continue;
+            }
+
+            if (input.length() > 10) {
+                System.out.println("ID exceeds character limit!");
+                continue;
+            }
+
+            try {
+                id = Integer.parseInt(input);
+                for (personalWallet t : foundList) {
+                    if (t.getId() == id) {
+                        target = t;
+                        break;
+                    }
+                }
+                if (target == null) {
+                    System.err.println("Error: ID does not exist!");
+                } else {
+                    break;
+                }
+            } catch (NumberFormatException e) {
+                System.err.println("Error: ID must be a number!");
+            }
+        }
+
+        //yes or no
+        String confirm;
+        do {
+            System.out.print("Are you sure you want to delete this record(Yes/No): ");
+            confirm = sc.nextLine();
+
+            if (confirm.equalsIgnoreCase("Yes")) {
+                transactions.remove(target);
+                foundList.remove(target);                        
+                System.out.println("Transaction deleted successfully!");
+
+                System.out.println("\nUpdated list after deletion:");
+
+                if (foundList.isEmpty()) {
+                    System.out.println("All transactions for the date " + sdf.format(inputDate) + " have been deleted.");
+                    break;
+                } else {
+                    printHeader();
+                    for (personalWallet t : transactions) {
+                        if (sdf.format(t.getDate()).equals(dateStr)) {
+                            printRow(
+                                    t.getId(),
+                                    sdf.format(t.getDate()),
+                                    t.getReason(),
+                                    t.getAmount()
+                            );
+                        }
+                    }
+                    printFooter();
+                }
+            } else if (confirm.equalsIgnoreCase("No")) {
+                System.out.println("Deletion canceled. Returning to MENU...");
+            } else if (confirm.equalsIgnoreCase("")) {
+                System.err.println("Error: Input cannot be empty!");
+            } else {
+                System.err.println("Error: Please enter 'Yes' or 'No'!");
+                confirm = "";
+            }
+        } while (!(confirm.equalsIgnoreCase("No") || confirm.equalsIgnoreCase("Yes")));
+
+        pause();
+    }
+}
+
+
